@@ -57,6 +57,12 @@ void Error_Handler(void);
 /* USER CODE END EFP */
 
 /* Private defines -----------------------------------------------------------*/
+#define ADC_DAISY_Pin GPIO_PIN_0
+#define ADC_DAISY_GPIO_Port GPIOD
+#define ADC_RST_Pin GPIO_PIN_1
+#define ADC_RST_GPIO_Port GPIOD
+#define ADC_SPI_CS_Pin GPIO_PIN_2
+#define ADC_SPI_CS_GPIO_Port GPIOD
 
 /* USER CODE BEGIN Private defines */
 

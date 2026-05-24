@@ -35,9 +35,9 @@
 #define AD9833_DIV2			(1 << 3)
 #define AD9833_MODE			(1 << 1)
 
-#define AD9833_OUT_SINUS	((0 << 5) | (0 << 1) | (0 << 3))//正弦波
-#define AD9833_OUT_TRIANGLE	((0 << 5) | (1 << 1) | (0 << 3))//三角波
-#define AD9833_OUT_MSB		((1 << 5) | (0 << 1) | (1 << 3)) //方波
+#define AD9833_OUT_SINUS	((0 << 5) | (0 << 1) | (0 << 3))
+#define AD9833_OUT_TRIANGLE	((0 << 5) | (1 << 1) | (0 << 3))
+#define AD9833_OUT_MSB		((1 << 5) | (0 << 1) | (1 << 3))
 #define AD9833_OUT_MSB2		((1 << 5) | (0 << 1) | (0 << 3))
 /******************************************************************************/
 /* Functions Prototypes                                                       */

@@ -46,9 +46,10 @@ target_link_directories(${CMAKE_PROJECT_NAME} PRIVATE
 # Add sources to executable
 target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     # Add user sources here
-    Core/User/Src/adc_dma_timer.c
-    Core/User/Src/ad9833.c
-    Core/User/Src/fft.c
+        Core/User/Src/adc_dma_timer.c
+        Core/User/Src/ad9833.c
+        Core/User/Src/fft.c
+        Core/User/Src/ADS8688.c
 )
 
 # Add include paths

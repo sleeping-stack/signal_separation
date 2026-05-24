@@ -24,6 +24,8 @@ typedef struct {
     WaveType_e type; // 波形类型
 } SignalInfo_t;
 
+extern SignalInfo_t sig_A, sig_B; // 全局变量存储A'，B'分析结果
+
 void perform_fft();
 
 SignalInfo_t interpolate_specific_peak(const float32_t *fft_mag, uint16_t peak_idx);

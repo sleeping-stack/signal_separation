@@ -28,6 +28,7 @@
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 #include "ad9833.h"
+#include "ADS8688.h"
 #include "adc_dma_timer.h"
 #include "fft.h"
 #include <stdio.h>
@@ -52,7 +53,8 @@
 /* Private variables ---------------------------------------------------------*/
 
 /* USER CODE BEGIN PV */
-
+ADS8688 ads8688;
+uint16_t adc_data[NUM_CHANNELS];
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -75,6 +77,7 @@ PUTCHAR_PROTOTYPE {
     HAL_UART_Transmit(&huart1, (uint8_t *) &ch, 1, 0xFFFF);
     return ch;
 }
+
 /* USER CODE END 0 */
 
 /**
@@ -115,12 +118,13 @@ int main(void)
   MX_USART1_UART_Init();
   MX_ADC1_Init();
   MX_TIM6_Init();
-  MX_SPI2_Init();
-  MX_TIM4_Init();
+  MX_SPI3_Init();
+  MX_TIM2_Init();
   /* USER CODE BEGIN 2 */
-    HAL_TIM_PWM_Start(&htim4,TIM_CHANNEL_2);
+    HAL_TIM_PWM_Start(&htim6,TIM_CHANNEL_3);
     AD9833_Init(hspi1);
     AD9833_Init(hspi4);
+
     adc_timer_init();
     set_ADC_Sampling_Rate(512000); // 设置采样率为512kHz
     adc_start_one_time();
@@ -132,10 +136,27 @@ int main(void)
         if (g_adc1_dma_complete_flag == 1) //采集数据完成完成前半部分，发送前半采集数据
         {
             test_signal_analysis();
-            
+            if (sig_A.type == WAVE_SINE) {
+                AD9833_SetFrequencyQuick(hspi1, sig_A.frequency, AD9833_OUT_SINUS);
+            } else if (sig_A.type == WAVE_TRIANGLE) {
+                AD9833_SetFrequencyQuick(hspi1, sig_A.frequency, AD9833_OUT_TRIANGLE);
+            }
+            if (sig_B.type == WAVE_SINE) {
+                AD9833_SetFrequencyQuick(hspi4, sig_B.frequency, AD9833_OUT_SINUS);
+            } else if (sig_B.type == WAVE_TRIANGLE) {
+                AD9833_SetFrequencyQuick(hspi4, sig_B.frequency, AD9833_OUT_TRIANGLE);
+            }
 
             g_adc1_dma_complete_flag = 0;
             memset(&g_adc1_dma_data[0], 0,ADC_DATA_LENGTH); //清除数据
+        }
+        if (ADS8688_Init(&ads8688, &hspi1, ADC_SPI_CS_GPIO_Port, ADC_SPI_CS_Pin) != 0) {
+            Error_Handler();
+        }
+        if (ADS_Read_All_Raw(&ads8688, adc_data) == HAL_OK) {
+            for (int i = 0; i < 2; i++) {
+                float voltage = ADS8688_ConvertToVoltage(adc_data[i], ads8688.channel_range[i]);
+            }
         }
     /* USER CODE END WHILE */
 

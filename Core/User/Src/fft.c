@@ -5,6 +5,7 @@ float32_t fft_outputbuf[FFT_LENGTH] = {0}; // FFT 变换后的复数结果
 /* FFT 实例与状态标志 */
 arm_cfft_instance_f32 scfft;
 
+SignalInfo_t sig_A, sig_B = {0.0f, 0.0f, WAVE_UNKNOWN};
 
 void perform_fft() {
     // 提取直流分量
@@ -187,7 +188,6 @@ void test_signal_analysis(void) {
     // 3. 提取频率和波形 (假设采样率为 10000 Hz)
     analyze_mixed_signals(fft_outputbuf, &sig1, &sig2);
 
-    SignalInfo_t sig_A, sig_B;
     if (sig1.frequency <= sig2.frequency) {
         sig_A = sig1;
         sig_B = sig2;
