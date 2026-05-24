@@ -35,29 +35,35 @@
 #define AD9833_DIV2			(1 << 3)
 #define AD9833_MODE			(1 << 1)
 
-#define AD9833_OUT_SINUS	((0 << 5) | (0 << 1) | (0 << 3))//ÕýÏÒ²¨
-#define AD9833_OUT_TRIANGLE	((0 << 5) | (1 << 1) | (0 << 3))//Èý½Ç²¨
-#define AD9833_OUT_MSB		((1 << 5) | (0 << 1) | (1 << 3)) //·½²¨
+#define AD9833_OUT_SINUS	((0 << 5) | (0 << 1) | (0 << 3))//正弦波
+#define AD9833_OUT_TRIANGLE	((0 << 5) | (1 << 1) | (0 << 3))//三角波
+#define AD9833_OUT_MSB		((1 << 5) | (0 << 1) | (1 << 3)) //方波
 #define AD9833_OUT_MSB2		((1 << 5) | (0 << 1) | (0 << 3))
 /******************************************************************************/
 /* Functions Prototypes                                                       */
 /******************************************************************************/
 /* Initializes the SPI communication peripheral and resets the part. */
 unsigned char AD9833_Init(SPI_HandleTypeDef hspi);
+
 /* Sets the Reset bit of the AD9833. */
 void AD9833_Reset(SPI_HandleTypeDef hspi);
+
 /* Clears the Reset bit of the AD9833. */
 void AD9833_ClearReset(SPI_HandleTypeDef hspi);
+
 /* Writes the value to a register. */
-void AD9833_SetRegisterValue(SPI_HandleTypeDef hspi,unsigned short regValue);
+void AD9833_SetRegisterValue(SPI_HandleTypeDef hspi, unsigned short regValue);
+
 /* Writes to the frequency registers. */
-void AD9833_SetFrequency(SPI_HandleTypeDef hspi,unsigned short reg, float fout,unsigned short type);
+void AD9833_SetFrequency(SPI_HandleTypeDef hspi, unsigned short reg, float fout, unsigned short type);
 
 /* Writes to the phase registers. */
-void AD9833_SetPhase(SPI_HandleTypeDef hspi,unsigned short reg, unsigned short val);
+void AD9833_SetPhase(SPI_HandleTypeDef hspi, unsigned short reg, unsigned short val);
+
 /* Selects the Frequency,Phase and Waveform type. */
-void AD9833_Setup(SPI_HandleTypeDef hspi,unsigned short freq,
-				  unsigned short phase,
-			 	  unsigned short type);
-void AD9833_SetFrequencyQuick(SPI_HandleTypeDef hspi,float fout,unsigned short type);
+void AD9833_Setup(SPI_HandleTypeDef hspi, unsigned short freq,
+                  unsigned short phase,
+                  unsigned short type);
+
+void AD9833_SetFrequencyQuick(SPI_HandleTypeDef hspi, float fout, unsigned short type);
 #endif

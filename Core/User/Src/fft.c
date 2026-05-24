@@ -1,26 +1,27 @@
 #include "fft.h"
 
 float32_t fft_inputbuf[2 * FFT_LENGTH] = {0}; // 转换为浮点数的输入信号
-float32_t fft_outputbuf[FFT_LENGTH] = {0};
+float32_t fft_outputbuf[FFT_LENGTH] = {0}; // FFT 变换后的复数结果
 /* FFT 实例与状态标志 */
 arm_cfft_instance_f32 scfft;
 
+
 void perform_fft() {
     // 提取直流分量
-    float32_t dc_component = 0.0f;
+    uint32_t dc_sum = 0;
     for (size_t i = 0; i < FFT_LENGTH; i++) {
-        dc_component += g_adc1_dma_data[i];
+        dc_sum += g_adc1_dma_data[i];
     }
-    dc_component /= FFT_LENGTH;
+    const float32_t dc_component = (float32_t) dc_sum / FFT_LENGTH;
 
     // 使用Hanning窗提高fft精度
     float32_t hanning_window[FFT_LENGTH];
-    Hanningwindow(hanning_window);
+    arm_hanning_f32(hanning_window, FFT_LENGTH);
 
     // 生成信号序列
     for (size_t i = 0; i < FFT_LENGTH; i++) {
         const float32_t temp =
-                (float) ((g_adc1_dma_data[i] - dc_component) * 3300.0 / 65535.0); // 先去除直流分量再转换为电压值
+                ((float32_t) g_adc1_dma_data[i] - dc_component) * 3300.0f / 65535.0f; // 先去除直流分量再转换为电压值
         fft_inputbuf[2 * i] = temp * hanning_window[i]; // 实部，单位为mV
         fft_inputbuf[2 * i + 1] = 0.0f; // 虚部
     }
@@ -30,32 +31,185 @@ void perform_fft() {
     arm_cmplx_mag_f32(fft_inputbuf, fft_outputbuf,
                       FFT_LENGTH); // 把运算结果复数求模得幅值
 
-    // 对非直流分量进行频谱归一化（单边谱）
+    // 原始单边谱除以 (N/2)，加窗补偿乘 2.0，合并计算就是乘 4.0 / N
     for (size_t i = 1; i < FFT_LENGTH / 2; i++) {
-        fft_outputbuf[i] = fft_outputbuf[i] / ((float)FFT_LENGTH / 2);
+        fft_outputbuf[i] = fft_outputbuf[i] * 4.0f / (float32_t) FFT_LENGTH;
     }
     // 直流分量单独归一化
-    fft_outputbuf[0] = fft_outputbuf[0] / FFT_LENGTH;
+    fft_outputbuf[0] = fft_outputbuf[0] * 2.0f / (float32_t) FFT_LENGTH;
 
     // 抹除右半部分
-    for (size_t i = FFT_LENGTH / 2; i < FFT_LENGTH; i++) {
+    for (uint16_t i = FFT_LENGTH / 2; i < FFT_LENGTH; i++) {
         fft_outputbuf[i] = 0.0f;
     }
 }
 
 /**
- * @brief 应用汉宁窗函数到输入数组
- *
- * 该函数计算并应用汉宁窗，用于减少FFT分析中的频谱泄漏
- * 汉宁窗公式为: w(n) = 0.5 * (1 - cos(2πn/N)), 其中n是样本索引，N是FFT长度
- *
- * @param hanning_window
- * 指向存储汉宁窗系数的浮点数组的指针，数组长度为FFT_LENGTH
- * @return 无返回值
+ * @brief 对指定的 FFT 峰值下标进行双峰插值
  */
-void Hanningwindow(float32_t hanning_window[]) // 汉宁窗
-{
-    for (size_t i = 0; i < FFT_LENGTH; i++) {
-        hanning_window[i] = 0.5f * (1.0f - arm_cos_f32(2.0f * PI * (float)i / FFT_LENGTH));
+SignalInfo_t interpolate_specific_peak(const float32_t *fft_mag, const uint16_t peak_idx) {
+    SignalInfo_t peak = {0.0f, 0.0f, WAVE_UNKNOWN};
+
+    // 边界保护
+    if (peak_idx == 0 || peak_idx >= FFT_LENGTH / 2 - 1) return peak;
+
+    const float32_t y0 = fft_mag[peak_idx];
+    const float32_t y_minus = fft_mag[peak_idx - 1];
+    const float32_t y_plus = fft_mag[peak_idx + 1];
+
+    float32_t y1 = 0.0f;
+    int direction = 0;
+
+    if (y_plus > y_minus) {
+        y1 = y_plus;
+        direction = 1;
+    } else {
+        y1 = y_minus;
+        direction = -1;
     }
+
+    float32_t delta = 0.0f;
+    if (y0 > 0.0f) {
+        const float32_t R = y1 / y0;
+        delta = (2.0f * R - 1.0f) / (R + 1.0f);
+        if (delta < 0.0f) delta = 0.0f;
+        if (delta > 0.5f) delta = 0.5f;
+    }
+
+    // 计算高精度频率与幅值
+    float32_t k_true = (float32_t) peak_idx + (float32_t) direction * delta;
+    peak.frequency = k_true * ((float32_t) g_adc_sample_rate / (float32_t) FFT_LENGTH);
+
+    float32_t pi_delta = PI * delta;
+    peak.amplitude = y0 * (pi_delta * (1.0f - delta * delta)) / sinf(pi_delta);
+
+    return peak;
+}
+
+/**
+ * @brief 分析混合信号，提取前两大主频信号的频率、幅值和波形类型
+ * @param fft_mag  求模并归一化后的 FFT 结果数组
+ * @param sig1     输出指针，存储第一大信号特征
+ * @param sig2     输出指针，存储第二大信号特征
+ */
+void analyze_mixed_signals(const float32_t *fft_mag,
+                           SignalInfo_t *sig1, SignalInfo_t *sig2) {
+    uint16_t local_peaks[PEAK_COUNT_MAX] = {0}; // 暂存局部峰值的下标
+    uint16_t peak_count = 0;
+
+    // 1. 寻找所有的“局部最大值”（即比左右两边都大的点），跳过直流(0,1)
+    for (size_t i = 2; i < FFT_LENGTH / 2 - 1; i++) {
+        if (fft_mag[i] > fft_mag[i - 1] &&
+            fft_mag[i] > fft_mag[i + 1] &&
+            fft_mag[i] > NOISE_THRESHOLD_MV) {
+            if (peak_count < PEAK_COUNT_MAX) {
+                local_peaks[peak_count++] = i;
+            }
+        }
+    }
+
+    // 2. 在局部峰值中找出最大的两个（即两个叠加信号的基频）
+    uint16_t top1_idx = 0, top2_idx = 0;
+    float32_t max1 = 0.0f, max2 = 0.0f;
+
+    for (size_t i = 0; i < peak_count; i++) {
+        float32_t val = fft_mag[local_peaks[i]];
+        if (val > max1) {
+            max2 = max1;
+            top2_idx = top1_idx;
+            max1 = val;
+            top1_idx = local_peaks[i];
+        } else if (val > max2) {
+            max2 = val;
+            top2_idx = local_peaks[i];
+        }
+    }
+
+    // 3. 对找到的两个主峰进行高精度插值
+    *sig1 = interpolate_specific_peak(fft_mag, top1_idx);
+    *sig2 = interpolate_specific_peak(fft_mag, top2_idx);
+
+    // 4. 判别波形类型 (验证三次谐波)
+    SignalInfo_t *target_sigs[2] = {sig1, sig2};
+
+    for (size_t i = 0; i < 2; i++) {
+        SignalInfo_t *sig = target_sigs[i];
+
+        // 判断是否为有效波形
+        if (sig->amplitude < NOISE_THRESHOLD_MV) {
+            sig->type = WAVE_UNKNOWN;
+            continue;
+        }
+
+        // 理论上的三次谐波频率
+        float32_t target_3rd_freq = sig->frequency * 3.0f;
+
+        // 奈奎斯特限制：如果三次谐波超出了采样率的一半，我们就看不见它了，默认归为正弦波
+        if (target_3rd_freq >= (float32_t) g_adc_sample_rate / 2.0f) {
+            sig->type = WAVE_SINE;
+            continue;
+        }
+
+        // 估算三次谐波在 FFT 数组中的粗略位置
+        const uint16_t bin_3rd = (uint16_t) (target_3rd_freq * FFT_LENGTH / (float32_t) g_adc_sample_rate + 0.5f);
+
+        // 在三次谐波附近寻找最大值（允许 ±2 bin 的频偏误差）
+        float32_t max_3rd_amp = 0.0f;
+        for (int16_t j = -2; j <= 2; j++) {
+            int search_idx = bin_3rd + j;
+            if (search_idx > 0 && search_idx < FFT_LENGTH / 2) {
+                if (fft_mag[search_idx] > max_3rd_amp) {
+                    max_3rd_amp = fft_mag[search_idx];
+                }
+            }
+        }
+
+        // 计算 3次谐波 与 基频 的幅值比
+        const float32_t ratio = max_3rd_amp / sig->amplitude;
+
+        // 理论上三角波的三次谐波幅度是 1/9 (约 0.111)
+        // 考虑到硬件低通滤波衰减和窗函数泄露，设置宽容度 [0.05, 0.20]
+        if (ratio >= 0.05f && ratio <= 0.20f) {
+            sig->type = WAVE_TRIANGLE;
+        } else {
+            sig->type = WAVE_SINE; // 找不到合格的三次谐波，即为正弦波
+        }
+    }
+}
+
+void test_signal_analysis(void) {
+    // 1. FFT 计算（包含加汉宁窗和幅值补偿）
+    perform_fft();
+
+    // 2. 定义存储结果的结构体
+    SignalInfo_t sig1, sig2;
+
+    // 3. 提取频率和波形 (假设采样率为 10000 Hz)
+    analyze_mixed_signals(fft_outputbuf, &sig1, &sig2);
+
+    SignalInfo_t sig_A, sig_B;
+    if (sig1.frequency <= sig2.frequency) {
+        sig_A = sig1;
+        sig_B = sig2;
+    } else {
+        sig_A = sig2;
+        sig_B = sig1;
+    }
+
+    if (sig_A.type == WAVE_TRIANGLE) {
+        sig_A.amplitude *= PI * PI / 8.0f;
+    }
+    if (sig_B.type == WAVE_TRIANGLE) {
+        sig_B.amplitude *= PI * PI / 8.0f;
+    }
+
+    // 打印结果
+    printf("Signal A: Frequency = %.2f Hz, Amplitude = %.2f mV, Type = %s\n",
+           sig_A.frequency, sig_A.amplitude,
+           (sig_A.type == WAVE_SINE) ? "SINE" : (sig_A.type == WAVE_TRIANGLE) ? "TRIANGLE" : "UNKNOWN"
+    );
+    printf("Signal B: Frequency = %.2f Hz, Amplitude = %.2f mV, Type = %s\n",
+           sig_B.frequency, sig_B.amplitude,
+           (sig_B.type == WAVE_SINE) ? "SINE" : (sig_B.type == WAVE_TRIANGLE) ? "TRIANGLE" : "UNKNOWN"
+    );
 }

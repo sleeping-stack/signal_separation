@@ -72,6 +72,7 @@ target_link_libraries(${CMAKE_PROJECT_NAME}
 
     # Add user defined libraries
         CMSISDSP
+        m
 )
 
 # 添加对浮点数printf的支持

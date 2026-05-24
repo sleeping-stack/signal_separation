@@ -116,10 +116,14 @@ int main(void)
   MX_ADC1_Init();
   MX_TIM6_Init();
   MX_SPI2_Init();
+  MX_TIM4_Init();
   /* USER CODE BEGIN 2 */
-  adc_timer_init();
-  set_ADC_Sampling_Rate(512000); // 设置采样率为512kHz
-  adc_start_one_time();
+    HAL_TIM_PWM_Start(&htim4,TIM_CHANNEL_2);
+    AD9833_Init(hspi1);
+    AD9833_Init(hspi4);
+    adc_timer_init();
+    set_ADC_Sampling_Rate(512000); // 设置采样率为512kHz
+    adc_start_one_time();
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -127,18 +131,11 @@ int main(void)
     while (1) {
         if (g_adc1_dma_complete_flag == 1) //采集数据完成完成前半部分，发送前半采集数据
         {
-            for (size_t i = 0; i < ADC_DATA_LENGTH - 1; i++) {
-                printf("line1=%f,", 3.3 * (float) (g_adc1_dma_data[i]) / 65535);
-            }
-            printf("line1=%f\r\n", 3.3 * (float) (g_adc1_dma_data[ADC_DATA_LENGTH - 1]) / 65535);
+            test_signal_analysis();
+            
+
             g_adc1_dma_complete_flag = 0;
             memset(&g_adc1_dma_data[0], 0,ADC_DATA_LENGTH); //清除数据
-
-            perform_fft();
-            for (size_t i = 0; i < FFT_LENGTH / 2 - 1; i++) {
-                printf("line2=%f,", fft_outputbuf[i]);
-            }
-            printf("line2=%f\r\n", fft_outputbuf[FFT_LENGTH / 2 - 1]);
         }
     /* USER CODE END WHILE */
 

@@ -1,6 +1,7 @@
 #include "adc_dma_timer.h"
 
 uint8_t g_adc1_dma_complete_flag = 0; //adc1 数据 dma 采集完成标志
+uint32_t g_adc_sample_rate = 0; // 当前ADC采样率（Sps）
 
 //ADC 回调函数
 void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef *hadc) {
@@ -67,5 +68,6 @@ int32_t set_ADC_Sampling_Rate(uint32_t target_fs) {
      */
     htim6.Instance->EGR = TIM_EGR_UG;
 
+    g_adc_sample_rate = target_fs;
     return 0;
 }
