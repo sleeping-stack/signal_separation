@@ -52,6 +52,7 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
         Core/User/Src/ADS8688.c
         Core/User/Src/uart_screen.c
         Core/User/Src/time_utils.c
+        Core/User/Src/phase_lock_driver.c
 )
 
 # Add include paths

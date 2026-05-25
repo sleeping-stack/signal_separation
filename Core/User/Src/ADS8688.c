@@ -3,7 +3,9 @@
 /*
  * INITIALISATION
  */
-uint8_t ADS8688_Init(ADS8688 *ads, SPI_HandleTypeDef *spiHandle, GPIO_TypeDef *csPinBank, uint16_t csPin) {
+uint8_t ADS8688_Init(ADS8688 *ads, SPI_HandleTypeDef *spiHandle, GPIO_TypeDef *csPinBank, uint16_t csPin)
+{
+
     HAL_GPIO_WritePin(ADC_DAISY_GPIO_Port, ADC_DAISY_Pin, GPIO_PIN_RESET);
     HAL_GPIO_WritePin(ADC_RST_GPIO_Port, ADC_RST_Pin, GPIO_PIN_SET);
 
@@ -67,7 +69,8 @@ uint8_t ADS8688_Init(ADS8688 *ads, SPI_HandleTypeDef *spiHandle, GPIO_TypeDef *c
     */
     uint8_t range_values[8] = {0x06, 0x06, 0x06, 0x06, 0x06, 0x06, 0x06, 0x06}; // 修改此数组可修改各通道量程
 
-    for (int ch = 0; ch < 8; ch++) {
+    for (int ch = 0; ch < 8; ch++)
+    {
         ads_data[0] = range_values[ch];
         ADS_Prog_Write(ads, CHN_0_RANGE + ch, ads_data);
         ads->channel_range[ch] = range_values[ch]; // 保存各通道量程
@@ -79,37 +82,39 @@ uint8_t ADS8688_Init(ADS8688 *ads, SPI_HandleTypeDef *spiHandle, GPIO_TypeDef *c
     return state;
 }
 
-float ADS8688_ConvertToVoltage(uint16_t raw, uint8_t range) {
+float ADS8688_ConvertToVoltage(uint16_t raw, uint8_t range)
+{
     const float VREF = 4.096f; // 内部参考电压
     float voltage = 0.0f;
 
-    switch (range) {
-        case 0x00: // ±2.5*VREF (±10.24V)
-            voltage = (raw / 65535.0f) * 20.48f - 10.24f;
-            break;
-        case 0x01: // ±1.25*VREF (±5.12V)
-            voltage = (raw / 65535.0f) * 10.24f - 5.12f;
-            break;
-        case 0x02: // ±0.625*VREF (±2.56V)
-            voltage = (raw / 65535.0f) * 5.12f - 2.56f;
-            break;
-        case 0x05: // 0-2.5*VREF (0-10.24V)
-            voltage = (raw / 65535.0f) * 10.24f;
-            break;
-        case 0x06: // 0-1.25*VREF (0-5.12V)
-            voltage = (raw / 65535.0f) * 5.12f;
-            break;
-        default: // 默认处理
-            voltage = (raw / 65535.0f) * 20.48f - 10.24f;
+    switch (range)
+    {
+    case 0x00: // ±2.5*VREF (±10.24V)
+        voltage = (raw / 65535.0f) * 20.48f - 10.24f;
+        break;
+    case 0x01: // ±1.25*VREF (±5.12V)
+        voltage = (raw / 65535.0f) * 10.24f - 5.12f;
+        break;
+    case 0x02: // ±0.625*VREF (±2.56V)
+        voltage = (raw / 65535.0f) * 5.12f - 2.56f;
+        break;
+    case 0x05: // 0-2.5*VREF (0-10.24V)
+        voltage = (raw / 65535.0f) * 10.24f;
+        break;
+    case 0x06: // 0-1.25*VREF (0-5.12V)
+        voltage = (raw / 65535.0f) * 5.12f;
+        break;
+    default: // 默认处理
+        voltage = (raw / 65535.0f) * 20.48f - 10.24f;
     }
     return voltage;
 }
 
 // after the read, data contains the data from the addressed register
-HAL_StatusTypeDef ADS_Prog_Read(ADS8688 *ads, uint8_t addr, uint8_t *data) {
+HAL_StatusTypeDef ADS_Prog_Read(ADS8688 *ads, uint8_t addr, uint8_t *data)
+{
     HAL_StatusTypeDef ret;
-    uint8_t txbuf[2] = {0x00, (addr << 1 & 0xfe)};
-    // [15:9]->address, [8]->0, [7:0]->don't care (0x00) (stm32 uses little endian so reverse it)
+    uint8_t txbuf[2] = {0x00, (addr << 1 & 0xfe)}; // [15:9]->address, [8]->0, [7:0]->don't care (0x00) (stm32 uses little endian so reverse it)
     uint8_t rxbuf[4];
 
     HAL_GPIO_WritePin(ads->csPinBank, ads->csPin, GPIO_PIN_RESET);
@@ -122,10 +127,10 @@ HAL_StatusTypeDef ADS_Prog_Read(ADS8688 *ads, uint8_t addr, uint8_t *data) {
 }
 
 // after the write, data should contain the data (byte) written to the addressed register (check equality for evaluation)
-HAL_StatusTypeDef ADS_Prog_Write(ADS8688 *ads, uint8_t addr, uint8_t *data) {
+HAL_StatusTypeDef ADS_Prog_Write(ADS8688 *ads, uint8_t addr, uint8_t *data)
+{
     HAL_StatusTypeDef ret;
-    uint8_t txbuf[2] = {data[0], (addr << 1 | 0x01)};
-    // [15:9]->address[6:0], [8]->1, [7:0]->data[7:0] (stm32 uses little endian so reverse it)
+    uint8_t txbuf[2] = {data[0], (addr << 1 | 0x01)}; // [15:9]->address[6:0], [8]->1, [7:0]->data[7:0] (stm32 uses little endian so reverse it)
     uint8_t rxbuf[4];
 
     HAL_GPIO_WritePin(ads->csPinBank, ads->csPin, GPIO_PIN_RESET);
@@ -137,10 +142,10 @@ HAL_StatusTypeDef ADS_Prog_Write(ADS8688 *ads, uint8_t addr, uint8_t *data) {
     return ret;
 }
 
-HAL_StatusTypeDef ADS_Cmd_Write(ADS8688 *ads, uint8_t cmd, uint8_t *data) {
+HAL_StatusTypeDef ADS_Cmd_Write(ADS8688 *ads, uint8_t cmd, uint8_t *data)
+{
     HAL_StatusTypeDef ret;
-    uint8_t txbuf[2] = {0x00, cmd};
-    // [15:9]->address[6:0], [8]->1, [7:0]->data[7:0] (stm32 uses little endian so reverse it)
+    uint8_t txbuf[2] = {0x00, cmd}; // [15:9]->address[6:0], [8]->1, [7:0]->data[7:0] (stm32 uses little endian so reverse it)
     uint8_t rxbuf[4];
 
     HAL_GPIO_WritePin(ads->csPinBank, ads->csPin, GPIO_PIN_RESET);
@@ -152,13 +157,15 @@ HAL_StatusTypeDef ADS_Cmd_Write(ADS8688 *ads, uint8_t cmd, uint8_t *data) {
     return ret;
 }
 
-HAL_StatusTypeDef ADS_Read_All_Raw(ADS8688 *ads, uint16_t *data) {
+HAL_StatusTypeDef ADS_Read_All_Raw(ADS8688 *ads, uint16_t *data)
+{
     HAL_StatusTypeDef ret;
     uint8_t ads_raw[2];
-    for (int i = 0; i < CHNS_NUM_READ; i++) {
+    for (int i = 0; i < CHNS_NUM_READ; i++)
+    {
         ret = ADS_Cmd_Write(ads, CONT, ads_raw);
         //data[i] = (int)((uint16_t)(ads_raw[1] << 8 | ads_raw[0]) >> 4);
-        data[i] = (int) ((uint16_t) (ads_raw[1] << 8 | ads_raw[0])); // >> 4);
+				data[i] = (int)((uint16_t)(ads_raw[1] << 8 | ads_raw[0]));// >> 4);
     }
     return ret;
 }

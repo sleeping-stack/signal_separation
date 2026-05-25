@@ -2,8 +2,6 @@
 #define ADS8688_H
 
 // include the correct file according to you MCU
-#include "stm32h7xx_hal.h"
-#include "stm32h7xx_hal_gpio.h"
 #include "main.h"
 
 
@@ -11,9 +9,8 @@
 // https://www.ti.com/lit/ds/symlink/ads8668.pdf?ts=1620233637463&ref_url=https%253A%252F%252Fwww.ti.com%252Fproduct%252FADS8668
 
 // ----------------------- ADS Commands and Registers ------------------------ //
-// Commands
 #define NUM_CHANNELS 8
-
+// Commands
 #define CONT 0x00				// continue operation in previous mode
 #define STBY 0x82				// device is placed into standby mode
 #define PWDN 0x83				// device is powered down
@@ -54,14 +51,13 @@
 
 #define CHNS_NUM_READ 8			// the number of channel you want to get the raw data (you also have to adjust the AUTO_SEQ_EN register value to match with the number of channel you like to read)
 
-
-
 typedef struct {
-    /* SPI */
-    SPI_HandleTypeDef *spiHandle;
-    GPIO_TypeDef *csPinBank;
-    uint16_t csPin;
-    uint8_t channel_range[8];
+
+	/* SPI */
+	SPI_HandleTypeDef *spiHandle;
+	GPIO_TypeDef 	  *csPinBank;
+	uint16_t 		   csPin;
+	uint8_t channel_range[8]; 
 } ADS8688;
 
 
@@ -71,18 +67,14 @@ typedef struct {
  *
  */
 uint8_t ADS8688_Init(ADS8688 *ads, SPI_HandleTypeDef *spiHandle, GPIO_TypeDef *csPinBank, uint16_t csPin);
-
 float ADS8688_ConvertToVoltage(uint16_t raw, uint8_t range);
-
 /*
  *
  * REGISTER AND COMAND LOW LEVEL FUNCTIONS
  *
  */
 HAL_StatusTypeDef ADS_Prog_Read(ADS8688 *ads, uint8_t addr, uint8_t *data);
-
 HAL_StatusTypeDef ADS_Prog_Write(ADS8688 *ads, uint8_t addr, uint8_t *data);
-
 HAL_StatusTypeDef ADS_Cmd_Write(ADS8688 *ads, uint8_t cmd, uint8_t *data);
 
 
@@ -93,6 +85,9 @@ HAL_StatusTypeDef ADS_Cmd_Write(ADS8688 *ads, uint8_t cmd, uint8_t *data);
  */
 
 HAL_StatusTypeDef ADS_Read_All_Raw(ADS8688 *ads, uint16_t *data);
+
+
+
 
 
 #endif

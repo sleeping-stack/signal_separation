@@ -66,12 +66,6 @@ void AD9833_SetFrequency(SPI_HandleTypeDef hspi, unsigned short reg, float fout,
     AD9833_SetRegisterValue(hspi, freqHi);
 }
 
-void AD9833_SetFrequencyQuick(SPI_HandleTypeDef hspi, float fout, unsigned short type) {
-    //AD9833_Setup(AD9833_FSEL0, AD9833_PSEL0, type);
-    AD9833_SetFrequency(hspi,AD9833_REG_FREQ0, fout, type); // 400 kHz
-}
-
-
 /***************************************************************************/ /**
  * @brief Writes to the phase registers.
  *
@@ -113,4 +107,33 @@ void AD9833_Setup(SPI_HandleTypeDef hspi, unsigned short freq,
 *******************************************************************************/
 void AD9833_SetWave(SPI_HandleTypeDef hspi, unsigned short type) {
     AD9833_SetRegisterValue(hspi, type);
+}
+
+/***************************************************************************/ /**
+ * @brief Sets frequency (Hz), phase (degrees), and waveform in one call.
+ *
+ * @param -  freq_hz   - Desired output frequency in Hz.
+ * @param -  phase_deg - Desired output phase in degrees (0-360).
+ * @param -  type      - Type of waveform to be output (e.g., AD9833_OUT_SINUS).
+ *
+ * @return  None.
+ */
+void AD9833_SetOutput(SPI_HandleTypeDef hspi, float freq_hz, float phase_deg, unsigned short type) {
+    unsigned short phase_word = 0;
+
+    if (phase_deg >= 360.0f || phase_deg < 0.0f) {
+        while (phase_deg >= 360.0f) {
+            phase_deg -= 360.0f;
+        }
+        while (phase_deg < 0.0f) {
+            phase_deg += 360.0f;
+        }
+    }
+
+    phase_word = (unsigned short)(phase_deg * (4096.0f / 360.0f) + 0.5f);
+    phase_word &= 0x0FFF;
+
+    AD9833_SetFrequency(hspi, AD9833_REG_FREQ0, freq_hz, type);
+    AD9833_SetPhase(hspi, AD9833_REG_PHASE0, phase_word);
+    AD9833_Setup(hspi, AD9833_FSEL0, AD9833_PSEL0, type);
 }

@@ -56,7 +56,7 @@
 
 /* USER CODE BEGIN PV */
 ADS8688 ads8688;
-uint16_t adc_data[NUM_CHANNELS];
+uint16_t adc_data[NUM_CHANNELS] = {0}; // 存储ADS8688采集的原始数据
 uint32_t time_start = 0;
 uint32_t time_end = 0;
 /* USER CODE END PV */
@@ -130,7 +130,7 @@ int main(void)
     adc_timer_init();
     set_ADC_Sampling_Rate(512000); // 设置采样率为512kHz
 
-    HAL_UART_Receive_IT(&huart1, &phase, 1);
+    HAL_UART_Receive_IT(&huart1, &phase_diffrence, 1);
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -141,23 +141,23 @@ int main(void)
             adc_start_one_time();
             g_receive_data_flag = 0;
         }
-        if (g_adc1_dma_complete_flag == 1) //采集数据完成完成前半部分，发送前半采集数据
+        if (g_adc1_dma_complete_flag == 1) //采集数据完成
         {
             test_signal_analysis();
 
             if (sig_A.type == WAVE_SINE) {
-                AD9833_SetFrequencyQuick(hspi1, sig_A.frequency, AD9833_OUT_SINUS);
+                AD9833_SetOutput(hspi1, sig_A.frequency, 0.0f, AD9833_OUT_SINUS);
                 printf("t2.txt=\"%lukHz, sin_wave\"\xff\xff\xff", (uint32_t) sig_A.frequency); // 信号A'
             } else if (sig_A.type == WAVE_TRIANGLE) {
-                AD9833_SetFrequencyQuick(hspi1, sig_A.frequency, AD9833_OUT_TRIANGLE);
-                printf("t2.txt=\"%lukHz, tria_wave\"\xff\xff\xff", (uint32_t) sig_A.frequency); // 信号A'
+                AD9833_SetOutput(hspi1, sig_A.frequency, 0.0f, AD9833_OUT_TRIANGLE);
+                printf("t2.txt=\"%lukHz, triangle_wave\"\xff\xff\xff", (uint32_t) sig_A.frequency); // 信号A'
             }
             if (sig_B.type == WAVE_SINE) {
-                AD9833_SetFrequencyQuick(hspi4, sig_B.frequency, AD9833_OUT_SINUS);
+                AD9833_SetOutput(hspi4, sig_B.frequency, 0.0f + (float32_t)phase_diffrence, AD9833_OUT_SINUS);
                 printf("t3.txt=\"%lukHz, sin_wave\"\xff\xff\xff", (uint32_t) sig_B.frequency); // 信号B'
             } else if (sig_B.type == WAVE_TRIANGLE) {
-                AD9833_SetFrequencyQuick(hspi4, sig_B.frequency, AD9833_OUT_TRIANGLE);
-                printf("t3.txt=\"%lukHz, tria_wave\"\xff\xff\xff", (uint32_t) sig_B.frequency); // 信号B'
+                AD9833_SetOutput(hspi4, sig_B.frequency, 0.0f + (float32_t)phase_diffrence, AD9833_OUT_TRIANGLE);
+                printf("t3.txt=\"%lukHz, triangle_wave\"\xff\xff\xff", (uint32_t) sig_B.frequency); // 信号B'
             }
 
             time_end = time_now_ms();
@@ -169,16 +169,17 @@ int main(void)
             memset(&sig_A, 0, sizeof(SignalInfo_t));
             memset(&sig_B, 0, sizeof(SignalInfo_t));
             // 清除相位数据
-            phase = 0;
+            phase_diffrence = 0;
         }
-        // if (ADS8688_Init(&ads8688, &hspi1, ADC_SPI_CS_GPIO_Port, ADC_SPI_CS_Pin) != 0) {
-        //     Error_Handler();
-        // }
-        // if (ADS_Read_All_Raw(&ads8688, adc_data) == HAL_OK) {
-        //     for (int i = 0; i < 2; i++) {
-        //         float voltage = ADS8688_ConvertToVoltage(adc_data[i], ads8688.channel_range[i]);
-        //     }
-        // }
+
+        if (ADS8688_Init(&ads8688, &hspi3, ADC_SPI_CS_GPIO_Port, ADC_SPI_CS_Pin) != 0) {
+            Error_Handler();
+        }
+        if (ADS_Read_All_Raw(&ads8688, adc_data) == HAL_OK) {
+            for (int i = 0; i < 2; i++) {
+                float voltage = ADS8688_ConvertToVoltage(adc_data[i], ads8688.channel_range[i]);
+            }
+        }
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */

@@ -65,5 +65,6 @@ void AD9833_Setup(SPI_HandleTypeDef hspi, unsigned short freq,
                   unsigned short phase,
                   unsigned short type);
 
-void AD9833_SetFrequencyQuick(SPI_HandleTypeDef hspi, float fout, unsigned short type);
+/* Sets frequency (Hz), phase (degrees), and waveform in one call. */
+void AD9833_SetOutput(SPI_HandleTypeDef hspi, float freq_hz, float phase_deg, unsigned short type);
 #endif
