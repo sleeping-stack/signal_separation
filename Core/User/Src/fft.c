@@ -202,14 +202,4 @@ void test_signal_analysis(void) {
     if (sig_B.type == WAVE_TRIANGLE) {
         sig_B.amplitude *= PI * PI / 8.0f;
     }
-
-    // 打印结果
-    printf("Signal A: Frequency = %.2f Hz, Amplitude = %.2f mV, Type = %s\n",
-           sig_A.frequency, sig_A.amplitude,
-           (sig_A.type == WAVE_SINE) ? "SINE" : (sig_A.type == WAVE_TRIANGLE) ? "TRIANGLE" : "UNKNOWN"
-    );
-    printf("Signal B: Frequency = %.2f Hz, Amplitude = %.2f mV, Type = %s\n",
-           sig_B.frequency, sig_B.amplitude,
-           (sig_B.type == WAVE_SINE) ? "SINE" : (sig_B.type == WAVE_TRIANGLE) ? "TRIANGLE" : "UNKNOWN"
-    );
 }

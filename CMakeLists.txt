@@ -50,6 +50,8 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
         Core/User/Src/ad9833.c
         Core/User/Src/fft.c
         Core/User/Src/ADS8688.c
+        Core/User/Src/uart_screen.c
+        Core/User/Src/time_utils.c
 )
 
 # Add include paths
