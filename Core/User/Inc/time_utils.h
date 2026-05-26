@@ -5,4 +5,4 @@
 
 uint32_t time_now_ms(void);
 
-#endif //SIGNAL_SEPARATION_TIME_UTILS_H
+#endif // SIGNAL_SEPARATION_TIME_UTILS_H

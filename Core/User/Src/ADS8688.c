@@ -114,7 +114,9 @@ float ADS8688_ConvertToVoltage(uint16_t raw, uint8_t range)
 HAL_StatusTypeDef ADS_Prog_Read(ADS8688 *ads, uint8_t addr, uint8_t *data)
 {
     HAL_StatusTypeDef ret;
-    uint8_t txbuf[2] = {0x00, (addr << 1 & 0xfe)}; // [15:9]->address, [8]->0, [7:0]->don't care (0x00) (stm32 uses little endian so reverse it)
+    uint8_t txbuf[2] = {
+        0x00, (addr << 1 &
+               0xfe)}; // [15:9]->address, [8]->0, [7:0]->don't care (0x00) (stm32 uses little endian so reverse it)
     uint8_t rxbuf[4];
 
     HAL_GPIO_WritePin(ads->csPinBank, ads->csPin, GPIO_PIN_RESET);
@@ -126,11 +128,14 @@ HAL_StatusTypeDef ADS_Prog_Read(ADS8688 *ads, uint8_t addr, uint8_t *data)
     return ret;
 }
 
-// after the write, data should contain the data (byte) written to the addressed register (check equality for evaluation)
+// after the write, data should contain the data (byte) written to the addressed register (check equality for
+// evaluation)
 HAL_StatusTypeDef ADS_Prog_Write(ADS8688 *ads, uint8_t addr, uint8_t *data)
 {
     HAL_StatusTypeDef ret;
-    uint8_t txbuf[2] = {data[0], (addr << 1 | 0x01)}; // [15:9]->address[6:0], [8]->1, [7:0]->data[7:0] (stm32 uses little endian so reverse it)
+    uint8_t txbuf[2] = {
+        data[0],
+        (addr << 1 | 0x01)}; // [15:9]->address[6:0], [8]->1, [7:0]->data[7:0] (stm32 uses little endian so reverse it)
     uint8_t rxbuf[4];
 
     HAL_GPIO_WritePin(ads->csPinBank, ads->csPin, GPIO_PIN_RESET);
@@ -145,7 +150,8 @@ HAL_StatusTypeDef ADS_Prog_Write(ADS8688 *ads, uint8_t addr, uint8_t *data)
 HAL_StatusTypeDef ADS_Cmd_Write(ADS8688 *ads, uint8_t cmd, uint8_t *data)
 {
     HAL_StatusTypeDef ret;
-    uint8_t txbuf[2] = {0x00, cmd}; // [15:9]->address[6:0], [8]->1, [7:0]->data[7:0] (stm32 uses little endian so reverse it)
+    uint8_t txbuf[2] = {0x00,
+                        cmd}; // [15:9]->address[6:0], [8]->1, [7:0]->data[7:0] (stm32 uses little endian so reverse it)
     uint8_t rxbuf[4];
 
     HAL_GPIO_WritePin(ads->csPinBank, ads->csPin, GPIO_PIN_RESET);
@@ -164,8 +170,8 @@ HAL_StatusTypeDef ADS_Read_All_Raw(ADS8688 *ads, uint16_t *data)
     for (int i = 0; i < CHNS_NUM_READ; i++)
     {
         ret = ADS_Cmd_Write(ads, CONT, ads_raw);
-        //data[i] = (int)((uint16_t)(ads_raw[1] << 8 | ads_raw[0]) >> 4);
-				data[i] = (int)((uint16_t)(ads_raw[1] << 8 | ads_raw[0]));// >> 4);
+        // data[i] = (int)((uint16_t)(ads_raw[1] << 8 | ads_raw[0]) >> 4);
+        data[i] = (int)((uint16_t)(ads_raw[1] << 8 | ads_raw[0])); // >> 4);
     }
     return ret;
 }

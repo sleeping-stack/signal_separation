@@ -251,4 +251,10 @@ SECTIONS
     libgcc.a:* ( * )
   }
 
+  /* dma_buffer section, used for DMA transfers, placed in RAM_D2, defined by the user */
+  .dma_buffer :
+  {
+    *(.dma_buffer)
+  } > RAM_D2
+  
 }
