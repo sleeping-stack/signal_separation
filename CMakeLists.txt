@@ -78,6 +78,3 @@ target_link_libraries(${CMAKE_PROJECT_NAME}
         CMSISDSP
         m
 )
-
-# 添加对浮点数printf的支持
-target_link_options(${CMAKE_PROJECT_NAME} PRIVATE -u _printf_float)

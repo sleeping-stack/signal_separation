@@ -66,4 +66,6 @@ void AD9833_Setup(SPI_HandleTypeDef hspi, unsigned short freq, unsigned short ph
 void AD9833_SetOutput(SPI_HandleTypeDef hspi, float freq_hz, float phase_deg, unsigned short type);
 
 void AD9833_SetFrequencyQuick(SPI_HandleTypeDef hspi,float fout,unsigned short type);
+/* 仅更新相位寄存器 (不改变频率)，phase_deg 单位度 (0~360) */
+void AD9833_SetPhaseQuick(SPI_HandleTypeDef hspi, float phase_deg);
 #endif

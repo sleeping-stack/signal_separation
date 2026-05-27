@@ -1,6 +1,6 @@
 #include "ad9833.h"
 
-#define FCLK 25000000 // 设置晶振频率
+#define FCLK 20000000 // 设置晶振频率
 #define RealFreDat 268435456.0 / FCLK // 总的公式为 Fout=（Fclk/2的28次方）*28位寄存器的值
 #define delay_ms(ms) HAL_Delay(ms)
 /**
@@ -162,4 +162,29 @@ void AD9833_SetFrequencyQuick(SPI_HandleTypeDef hspi, float fout, unsigned short
 
     // AD9833_Setup(AD9833_FSEL0, AD9833_PSEL0, type);
     AD9833_SetFrequency(hspi, AD9833_REG_FREQ0, fout, type); // 400 kHz
+}
+
+/**
+ * @brief 仅更新 AD9833 相位寄存器 (不改变频率和波形配置)
+ * @param  hspi      : SPI 句柄
+ * @param  phase_deg : 相位 (度, 0~360)
+ */
+void AD9833_SetPhaseQuick(SPI_HandleTypeDef hspi, float phase_deg)
+{
+    unsigned short phase_word;
+
+    /* 归一化到 [0, 360) */
+    if (phase_deg >= 360.0f || phase_deg < 0.0f)
+    {
+        while (phase_deg >= 360.0f)
+            phase_deg -= 360.0f;
+        while (phase_deg < 0.0f)
+            phase_deg += 360.0f;
+    }
+
+    /* 12 位相位字: 0~4095 对应 0~360° */
+    phase_word = (unsigned short)(phase_deg * (4096.0f / 360.0f) + 0.5f);
+    phase_word &= 0x0FFF;
+
+    AD9833_SetPhase(hspi, AD9833_REG_PHASE0, phase_word);
 }

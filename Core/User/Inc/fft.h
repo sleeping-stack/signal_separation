@@ -9,6 +9,7 @@
 // 设定一个噪声阈值(mV)，低于此幅值的峰值不参与分析，防止误判噪声
 #define NOISE_THRESHOLD_MV 20.0f
 #define PEAK_COUNT_MAX 20
+#define FREQ_STEP_HZ 5000.0f // A、B信号频率必须为5000Hz的整数倍
 
 // 定义波形类型
 typedef enum

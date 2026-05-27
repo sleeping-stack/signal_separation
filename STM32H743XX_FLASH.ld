@@ -68,7 +68,7 @@ _estack = ORIGIN(DTCMRAM) + LENGTH(DTCMRAM);    /* end of RAM */
 _sstack = _estack - _Min_Stack_Size;
 /* Generate a link error if heap and stack don't fit into RAM */
 _Min_Heap_Size = 0x200;      /* required amount of heap  */
-_Min_Stack_Size = 0x7400; /* required amount of stack */
+_Min_Stack_Size = 0x6000; /* required amount of stack */
 
 /* Define output sections */
 SECTIONS
@@ -214,6 +214,17 @@ SECTIONS
   PROVIDE( __arm32_tls_tcb_offset = MAX(8, __tls_align) );
   PROVIDE( __arm64_tls_tcb_offset = MAX(16, __tls_align) );
 
+  /* 将 4096点FFT、8192点FFT、ADC数组 全部规整到大容量的 RAM_D2 中 */
+  /* 放在 .bss 之前，确保链接器正确匹配，不被 *(.bss*) 误捕获 */
+  .user_data (NOLOAD) :
+  {
+    . = ALIGN(4);
+    *(.FFT_BUF_4096)      /* 4096点FFT段 (fft_outputbuf + hanning_window) */
+    *(.FFT_BUF_8192)      /* 8192点FFT段 (fft_inputbuf) */
+    *(.ADC_SAMPLE_BUF)    /* ADC采样段 (g_adc1_dma_data) */
+    . = ALIGN(4);
+  } > RAM_D2
+
   .bss (NOLOAD) : ALIGN(4)
   {
     *(.bss)
@@ -228,7 +239,7 @@ SECTIONS
   PROVIDE( __non_tls_bss_start = ADDR(.bss) );
 
   PROVIDE( __bss_start = __tbss_start );
-  PROVIDE( __bss_size = __bss_end - __bss_start );
+  PROVIDE( __bss_size = __bss_end - __bss_start );           
 
   /* User_heap_stack section, used to check that there is enough RAM left */
   ._user_heap_stack (NOLOAD) :
@@ -241,8 +252,6 @@ SECTIONS
     . = ALIGN(8);
   } >DTCMRAM
 
-
-
   /* Remove information from the standard libraries */
   /DISCARD/ :
   {
@@ -250,11 +259,4 @@ SECTIONS
     libm.a:* ( * )
     libgcc.a:* ( * )
   }
-
-  /* dma_buffer section, used for DMA transfers, placed in RAM_D2, defined by the user */
-  .dma_buffer :
-  {
-    *(.dma_buffer)
-  } > RAM_D2
-  
 }

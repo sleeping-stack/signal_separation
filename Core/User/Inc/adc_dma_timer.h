@@ -5,6 +5,7 @@
 #include "tim.h"
 #include "main.h"
 #include <stdio.h>
+#include "dma.h"
 
 #define ADC_DATA_LENGTH 4096 // 定义采集数据长度
 

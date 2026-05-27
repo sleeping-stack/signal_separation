@@ -1,8 +1,10 @@
 #include "adc_dma_timer.h"
 
+extern DMA_HandleTypeDef hdma_adc1; /* DMA句柄，定义于 adc.c */
+
 uint8_t g_adc1_dma_complete_flag = 0; // adc1 数据 dma 采集完成标志
 uint32_t g_adc_sample_rate = 0; // 当前ADC采样率（Sps）
-uint16_t g_adc1_dma_data[ADC_DATA_LENGTH] __attribute__((section(".dma_buffer"))); // adc1 dma 采集数据缓冲区
+uint16_t g_adc1_dma_data[ADC_DATA_LENGTH] __attribute__((section(".ADC_SAMPLE_BUF"))); // adc1 dma 采集数据缓冲区
 
 // ADC 回调函数
 void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef *hadc)
@@ -28,8 +30,11 @@ void adc_timer_init()
 // 进行一次adc采集
 void adc_start_one_time()
 {
-    HAL_ADC_Start_DMA(&hadc1, (uint32_t *)g_adc1_dma_data, ADC_DATA_LENGTH); // ADC 的 dma 开始采集
+    MX_DMA_Init(); // 重新初始化 DMA，清除状态
+    MX_ADC1_Init();
+
     HAL_TIM_Base_Start(&htim6); // 启动定时器，开始触发 ADC 采样
+    HAL_ADC_Start_DMA(&hadc1, (uint32_t *)g_adc1_dma_data, ADC_DATA_LENGTH); // ADC 的 dma 开始采集
 }
 
 /**

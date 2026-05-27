@@ -19,7 +19,6 @@
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
 #include "adc.h"
-#include "arm_math_types.h"
 #include "dma.h"
 #include "spi.h"
 #include "tim.h"
@@ -28,7 +27,7 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-#include "ADS8688.h"
+#include "phase_lock_driver.h"
 #include "ad9833.h"
 #include "adc_dma_timer.h"
 #include "fft.h"
@@ -57,8 +56,6 @@
 /* Private variables ---------------------------------------------------------*/
 
 /* USER CODE BEGIN PV */
-ADS8688 ads8688;
-uint16_t adc_data[NUM_CHANNELS] = {0}; // 存储ADS8688采集的原始数据
 uint32_t time_start = 0;
 uint32_t time_end = 0;
 char tx_buffer[32] = {0}; // 用于存储发送到串口屏的数据
@@ -73,18 +70,6 @@ static void MPU_Config(void);
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
-// printf重定向
-#ifdef __GNUC__
-#define PUTCHAR_PROTOTYPE int __io_putchar(int ch)
-#else
-#define PUTCHAR_PROTOTYPE int fputc(int ch, FILE *f)
-#endif
-PUTCHAR_PROTOTYPE
-{
-    // 阻塞方式打印 -> 串口1
-    HAL_UART_Transmit(&huart1, (uint8_t *)&ch, 1, 0xFFFF);
-    return ch;
-}
 
 /* USER CODE END 0 */
 
@@ -131,6 +116,9 @@ int main(void)
     AD9833_Init(hspi1); // A'
     AD9833_Init(hspi4); // B'
 
+    phase_lock_driver_init(); // 锁相模块初始化
+
+    memset(g_adc1_dma_data, 0, sizeof(g_adc1_dma_data));
     adc_timer_init();
     set_ADC_Sampling_Rate(512000); // 设置采样率为512kHz
 
@@ -141,8 +129,12 @@ int main(void)
     /* USER CODE BEGIN WHILE */
     while (1)
     {
+        // SysTick 1kHz 标志位轮询
+        phase_lock_driver_poll();
+
         if (g_receive_data_flag == 1)
         {
+            phase_lock_driver_disable(); /* 新采集开始前暂停锁相 */
             time_start = time_now_ms();
             adc_start_one_time();
             g_receive_data_flag = 0;
@@ -168,7 +160,8 @@ int main(void)
             }
             if (sig_B.type == WAVE_SINE)
             {
-                AD9833_SetOutput(hspi4, sig_B.frequency, 0.0f + (float32_t)phase_diffrence, AD9833_OUT_SINUS);
+                /* 信号B'相位 = phase_diffrence 度，实现A'与B'的相位差 */
+                AD9833_SetOutput(hspi4, sig_B.frequency, (float32_t)phase_diffrence, AD9833_OUT_SINUS);
                 HAL_UART_Transmit(
                     &huart1, (uint8_t *)tx_buffer,
                     sprintf(tx_buffer, "t3.txt=\"%lukHz, sin_wave\"\xff\xff\xff", (uint32_t)sig_B.frequency),
@@ -176,7 +169,8 @@ int main(void)
             }
             else if (sig_B.type == WAVE_TRIANGLE)
             {
-                AD9833_SetOutput(hspi4, sig_B.frequency, 0.0f + (float32_t)phase_diffrence, AD9833_OUT_TRIANGLE);
+                /* 信号B'相位 = phase_diffrence 度，实现A'与B'的相位差 */
+                AD9833_SetOutput(hspi4, sig_B.frequency, (float32_t)phase_diffrence, AD9833_OUT_TRIANGLE);
                 HAL_UART_Transmit(
                     &huart1, (uint8_t *)tx_buffer,
                     sprintf(tx_buffer, "t3.txt=\"%lukHz, triangle_wave\"\xff\xff\xff", (uint32_t)sig_B.frequency),
@@ -189,25 +183,22 @@ int main(void)
                 sprintf(tx_buffer, "t6.txt=\"%.2fs\"\xff\xff\xff", (float32_t)(time_end - time_start) / 1000.0f),
                 0xFFFF); // 分析时间
 
+            /* 信号生成完毕，启动锁相闭环控制（通过微调频率维持锁定） */
+            {
+                unsigned short type_a = (sig_A.type == WAVE_TRIANGLE) ? AD9833_OUT_TRIANGLE : AD9833_OUT_SINUS;
+                unsigned short type_b = (sig_B.type == WAVE_TRIANGLE) ? AD9833_OUT_TRIANGLE : AD9833_OUT_SINUS;
+                float freq_a = sig_A.frequency;
+                float freq_b = sig_B.frequency;
+                float phase_a = 0.0f; /* A' 相位固定 0° */
+                float phase_b = (float32_t)phase_diffrence; /* B' 相位 = 串口屏下发的相位差 */
+                phase_lock_driver_enable(freq_a, type_a, phase_a, freq_b, type_b, phase_b);
+            }
+
             g_adc1_dma_complete_flag = 0;
-            memset(&g_adc1_dma_data[0], 0, ADC_DATA_LENGTH); // 清除数据
+            memset(g_adc1_dma_data, 0, sizeof(g_adc1_dma_data)); // 清除数据
             // 清除sigA，sigB
             memset(&sig_A, 0, sizeof(SignalInfo_t));
             memset(&sig_B, 0, sizeof(SignalInfo_t));
-            // 清除相位数据
-            phase_diffrence = 0;
-        }
-
-        if (ADS8688_Init(&ads8688, &hspi3, ADC_SPI_CS_GPIO_Port, ADC_SPI_CS_Pin) != 0)
-        {
-            Error_Handler();
-        }
-        if (ADS_Read_All_Raw(&ads8688, adc_data) == HAL_OK)
-        {
-            for (int i = 0; i < 2; i++)
-            {
-                float voltage = ADS8688_ConvertToVoltage(adc_data[i], ads8688.channel_range[i]);
-            }
         }
         /* USER CODE END WHILE */
 

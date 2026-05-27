@@ -1,14 +1,18 @@
 #include "fft.h"
 
-float32_t fft_inputbuf[2 * FFT_LENGTH] = {0}; // 转换为浮点数的输入信号
-float32_t fft_outputbuf[FFT_LENGTH] = {0}; // FFT 变换后的复数结果
+float32_t fft_inputbuf[2 * FFT_LENGTH] __attribute__((section(".FFT_BUF_8192"))); // 转换为浮点数的输入信号
+float32_t fft_outputbuf[FFT_LENGTH] __attribute__((section(".FFT_BUF_4096"))); // FFT 变换后的复数结果
+float32_t hanning_window[FFT_LENGTH] __attribute__((section(".FFT_BUF_4096"))); // Hanning窗系数 (复用4096段，在fft_outputbuf之后)
 /* FFT 实例与状态标志 */
 arm_cfft_instance_f32 scfft;
 
 SignalInfo_t sig_A, sig_B = {0.0f, 0.0f, WAVE_UNKNOWN};
 
 void perform_fft()
-{
+{   
+    memset(fft_inputbuf, 0, sizeof(fft_inputbuf));
+    memset(fft_outputbuf, 0, sizeof(fft_outputbuf));
+
     // 提取直流分量
     uint32_t dc_sum = 0;
     for (size_t i = 0; i < FFT_LENGTH; i++)
@@ -17,8 +21,7 @@ void perform_fft()
     }
     const float32_t dc_component = (float32_t)dc_sum / FFT_LENGTH;
 
-    // 使用Hanning窗提高fft精度
-    float32_t hanning_window[FFT_LENGTH];
+    // 使用Hanning窗提高fft精度 (hanning_window 已定义为全局缓冲区，避免栈溢出)
     arm_hanning_f32(hanning_window, FFT_LENGTH);
 
     // 生成信号序列
@@ -226,6 +229,10 @@ void test_signal_analysis(void)
         sig_A = sig2;
         sig_B = sig1;
     }
+
+    // 将A、B信号频率取整到最近的5000Hz整数倍
+    sig_A.frequency = roundf(sig_A.frequency / FREQ_STEP_HZ) * FREQ_STEP_HZ;
+    sig_B.frequency = roundf(sig_B.frequency / FREQ_STEP_HZ) * FREQ_STEP_HZ;
 
     if (sig_A.type == WAVE_TRIANGLE)
     {
