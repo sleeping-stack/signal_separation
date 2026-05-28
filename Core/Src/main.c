@@ -148,14 +148,14 @@ int main(void)
                 AD9833_SetOutput(hspi1, sig_A.frequency, 0.0f, AD9833_OUT_SINUS);
                 HAL_UART_Transmit(
                     &huart1, (uint8_t *)tx_buffer,
-                    sprintf(tx_buffer, "t2.txt=\"%lukHz, sin_wave\"\xff\xff\xff", (uint32_t)sig_A.frequency), 0xFFFF);
+                    sprintf(tx_buffer, "t2.txt=\"%luHz, sin_wave\"\xff\xff\xff", (uint32_t)sig_A.frequency), 0xFFFF);
             }
             else if (sig_A.type == WAVE_TRIANGLE)
             {
                 AD9833_SetOutput(hspi1, sig_A.frequency, 0.0f, AD9833_OUT_TRIANGLE);
                 HAL_UART_Transmit(
                     &huart1, (uint8_t *)tx_buffer,
-                    sprintf(tx_buffer, "t2.txt=\"%lukHz, triangle_wave\"\xff\xff\xff", (uint32_t)sig_A.frequency),
+                    sprintf(tx_buffer, "t2.txt=\"%luHz, triangle_wave\"\xff\xff\xff", (uint32_t)sig_A.frequency),
                     0xFFFF);
             }
             if (sig_B.type == WAVE_SINE)
@@ -164,7 +164,7 @@ int main(void)
                 AD9833_SetOutput(hspi4, sig_B.frequency, (float32_t)phase_diffrence, AD9833_OUT_SINUS);
                 HAL_UART_Transmit(
                     &huart1, (uint8_t *)tx_buffer,
-                    sprintf(tx_buffer, "t3.txt=\"%lukHz, sin_wave\"\xff\xff\xff", (uint32_t)sig_B.frequency),
+                    sprintf(tx_buffer, "t3.txt=\"%luHz, sin_wave\"\xff\xff\xff", (uint32_t)sig_B.frequency),
                     0xFFFF); // 信号B'
             }
             else if (sig_B.type == WAVE_TRIANGLE)
@@ -173,7 +173,7 @@ int main(void)
                 AD9833_SetOutput(hspi4, sig_B.frequency, (float32_t)phase_diffrence, AD9833_OUT_TRIANGLE);
                 HAL_UART_Transmit(
                     &huart1, (uint8_t *)tx_buffer,
-                    sprintf(tx_buffer, "t3.txt=\"%lukHz, triangle_wave\"\xff\xff\xff", (uint32_t)sig_B.frequency),
+                    sprintf(tx_buffer, "t3.txt=\"%luHz, triangle_wave\"\xff\xff\xff", (uint32_t)sig_B.frequency),
                     0xFFFF); // 信号B'
             }
 
