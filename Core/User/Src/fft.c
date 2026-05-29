@@ -2,14 +2,15 @@
 
 float32_t fft_inputbuf[2 * FFT_LENGTH] __attribute__((section(".FFT_BUF_8192"))); // 转换为浮点数的输入信号
 float32_t fft_outputbuf[FFT_LENGTH] __attribute__((section(".FFT_BUF_4096"))); // FFT 变换后的复数结果
-float32_t hanning_window[FFT_LENGTH] __attribute__((section(".FFT_BUF_4096"))); // Hanning窗系数 (复用4096段，在fft_outputbuf之后)
+float32_t hanning_window[FFT_LENGTH]
+    __attribute__((section(".FFT_BUF_4096"))); // Hanning窗系数 (复用4096段，在fft_outputbuf之后)
 /* FFT 实例与状态标志 */
 arm_cfft_instance_f32 scfft;
 
 SignalInfo_t sig_A, sig_B = {0.0f, 0.0f, WAVE_UNKNOWN};
 
 void perform_fft()
-{   
+{
     memset(fft_inputbuf, 0, sizeof(fft_inputbuf));
     memset(fft_outputbuf, 0, sizeof(fft_outputbuf));
 
