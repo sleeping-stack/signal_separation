@@ -112,15 +112,17 @@ int main(void)
     MX_ADC1_Init();
     MX_TIM6_Init();
     MX_SPI3_Init();
+    MX_TIM7_Init();
     /* USER CODE BEGIN 2 */
     AD9833_Init(hspi1); // A'
     AD9833_Init(hspi4); // B'
 
-    phase_lock_driver_init(); // 锁相模块初始化
+    HAL_TIM_Base_Start_IT(&htim7);
+    phase_lock_driver_init(); // ADS8688 硬件初始化 + PID 控制器初始化
 
     memset(g_adc1_dma_data, 0, sizeof(g_adc1_dma_data));
     adc_timer_init();
-    set_ADC_Sampling_Rate(512000); // 设置采样率为512kHz
+    set_ADC_Sampling_Rate(1000000); // 设置采样率为1MHz
 
     HAL_UART_Receive_IT(&huart1, &phase_diffrence, 1);
     /* USER CODE END 2 */
@@ -129,7 +131,7 @@ int main(void)
     /* USER CODE BEGIN WHILE */
     while (1)
     {
-        // SysTick 1kHz 标志位轮询
+        // tim7 5kHz 标志位轮询 — PID 锁相
         phase_lock_driver_poll();
 
         if (g_receive_data_flag == 1)
@@ -146,35 +148,36 @@ int main(void)
             if (sig_A.type == WAVE_SINE)
             {
                 AD9833_SetOutput(hspi1, sig_A.frequency, 0.0f, AD9833_OUT_SINUS);
-                HAL_UART_Transmit(
-                    &huart1, (uint8_t *)tx_buffer,
-                    sprintf(tx_buffer, "t2.txt=\"%luHz, sin_wave\"\xff\xff\xff", (uint32_t)sig_A.frequency), 0xFFFF);
+                HAL_UART_Transmit(&huart1, (uint8_t *)tx_buffer,
+                                  sprintf(tx_buffer, "t2.txt=\"%luHz, sin_wave\"\xff\xff\xff",
+                                          (uint32_t)(roundf(sig_A.frequency / FREQ_STEP_HZ) * FREQ_STEP_HZ)),
+                                  0xFFFF);
             }
             else if (sig_A.type == WAVE_TRIANGLE)
             {
                 AD9833_SetOutput(hspi1, sig_A.frequency, 0.0f, AD9833_OUT_TRIANGLE);
-                HAL_UART_Transmit(
-                    &huart1, (uint8_t *)tx_buffer,
-                    sprintf(tx_buffer, "t2.txt=\"%luHz, triangle_wave\"\xff\xff\xff", (uint32_t)sig_A.frequency),
-                    0xFFFF);
+                HAL_UART_Transmit(&huart1, (uint8_t *)tx_buffer,
+                                  sprintf(tx_buffer, "t2.txt=\"%luHz, triangle_wave\"\xff\xff\xff",
+                                          (uint32_t)(roundf(sig_A.frequency / FREQ_STEP_HZ) * FREQ_STEP_HZ)),
+                                  0xFFFF);
             }
             if (sig_B.type == WAVE_SINE)
             {
                 /* 信号B'相位 = phase_diffrence 度，实现A'与B'的相位差 */
                 AD9833_SetOutput(hspi4, sig_B.frequency, (float32_t)phase_diffrence, AD9833_OUT_SINUS);
-                HAL_UART_Transmit(
-                    &huart1, (uint8_t *)tx_buffer,
-                    sprintf(tx_buffer, "t3.txt=\"%luHz, sin_wave\"\xff\xff\xff", (uint32_t)sig_B.frequency),
-                    0xFFFF); // 信号B'
+                HAL_UART_Transmit(&huart1, (uint8_t *)tx_buffer,
+                                  sprintf(tx_buffer, "t3.txt=\"%luHz, sin_wave\"\xff\xff\xff",
+                                          (uint32_t)(roundf(sig_B.frequency / FREQ_STEP_HZ) * FREQ_STEP_HZ)),
+                                  0xFFFF); // 信号B'
             }
             else if (sig_B.type == WAVE_TRIANGLE)
             {
                 /* 信号B'相位 = phase_diffrence 度，实现A'与B'的相位差 */
                 AD9833_SetOutput(hspi4, sig_B.frequency, (float32_t)phase_diffrence, AD9833_OUT_TRIANGLE);
-                HAL_UART_Transmit(
-                    &huart1, (uint8_t *)tx_buffer,
-                    sprintf(tx_buffer, "t3.txt=\"%luHz, triangle_wave\"\xff\xff\xff", (uint32_t)sig_B.frequency),
-                    0xFFFF); // 信号B'
+                HAL_UART_Transmit(&huart1, (uint8_t *)tx_buffer,
+                                  sprintf(tx_buffer, "t3.txt=\"%luHz, triangle_wave\"\xff\xff\xff",
+                                          (uint32_t)(roundf(sig_B.frequency / FREQ_STEP_HZ) * FREQ_STEP_HZ)),
+                                  0xFFFF); // 信号B'
             }
 
             time_end = time_now_ms();
@@ -183,15 +186,13 @@ int main(void)
                 sprintf(tx_buffer, "t6.txt=\"%.2fs\"\xff\xff\xff", (float32_t)(time_end - time_start) / 1000.0f),
                 0xFFFF); // 分析时间
 
-            /* 信号生成完毕，启动锁相闭环控制（通过微调频率维持锁定） */
+            /* 信号生成完毕，启动 PID 锁相闭环控制（通过调节频率保持锁相放大器输出为 0V） */
             {
                 unsigned short type_a = (sig_A.type == WAVE_TRIANGLE) ? AD9833_OUT_TRIANGLE : AD9833_OUT_SINUS;
                 unsigned short type_b = (sig_B.type == WAVE_TRIANGLE) ? AD9833_OUT_TRIANGLE : AD9833_OUT_SINUS;
                 float freq_a = sig_A.frequency;
                 float freq_b = sig_B.frequency;
-                float phase_a = 0.0f; /* A' 相位固定 0° */
-                float phase_b = (float32_t)phase_diffrence; /* B' 相位 = 串口屏下发的相位差 */
-                phase_lock_driver_enable(freq_a, type_a, phase_a, freq_b, type_b, phase_b);
+                phase_lock_driver_enable(freq_a, type_a, 0.0f, freq_b, type_b, (float)phase_diffrence);
             }
 
             g_adc1_dma_complete_flag = 0;

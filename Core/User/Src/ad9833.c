@@ -1,6 +1,6 @@
 #include "ad9833.h"
 
-#define FCLK 1000000 // 设置晶振频率为1MHz
+#define FCLK 20000000 // 设置晶振频率为20MHz
 #define RealFreDat 268435456.0 / FCLK // 总的公式为 Fout=（Fclk/2的28次方）*28位寄存器的值
 #define delay_ms(ms) HAL_Delay(ms)
 /**

@@ -119,8 +119,8 @@ float phase_lock_driver_read_adc(uint8_t channel)
 
 /**
  * @brief  锁相闭环控制 — 调节 AD9833 输出频率，维持锁相放大器输出为 0V
- * @note   由 SysTick 以 1kHz 频率调用。
- *         读取 ADS8688 CH0/CH1 电压 → PID 计算频率修正 → AD9833_SetFrequencyQuick 更新频率。
+ * @note   由 TIM7 以 5kHz 频率调用。
+ *         一次性读取 ADS8688 全部通道 → 提取 CH0/CH1 电压 → PID 计算频率修正 → AD9833 更新频率。
  *         当 g_phase_lock_enabled == 0 时直接返回。
  */
 void phase_lock_driver_maintain_zero_output(void)
@@ -134,8 +134,15 @@ void phase_lock_driver_maintain_zero_output(void)
         return;
     }
 
+    /* 一次性读取 ADS8688 全部 8 通道（避免两次 SPI 全读的冗余通信） */
+    if (ADS_Read_All_Raw(&ads8688, adc_data) != HAL_OK)
+    {
+        return; /* SPI 通信失败，跳过本轮 */
+    }
+    voltage_a = ADS8688_ConvertToVoltage(adc_data[PHASE_LOCK_ADC_CH_A], ads8688.channel_range[PHASE_LOCK_ADC_CH_A]);
+    voltage_b = ADS8688_ConvertToVoltage(adc_data[PHASE_LOCK_ADC_CH_B], ads8688.channel_range[PHASE_LOCK_ADC_CH_B]);
+
     /* ---- 锁相放大器 A (ADS8688 CH0 → AD9833 hspi1) ---- */
-    voltage_a = phase_lock_driver_read_adc(PHASE_LOCK_ADC_CH_A);
 
     /* 延迟捕获：等待锁相放大器 LPF 稳定后再捕获目标电压 */
     if (!g_pid_A.target_captured)
@@ -183,7 +190,6 @@ void phase_lock_driver_maintain_zero_output(void)
     AD9833_SetPhaseQuick(hspi1, g_pid_A.phase_deg);
 
     /* ---- 锁相放大器 B (ADS8688 CH1 → AD9833 hspi4) ---- */
-    voltage_b = phase_lock_driver_read_adc(PHASE_LOCK_ADC_CH_B);
 
     /* 延迟捕获：等待锁相放大器 LPF 稳定后再捕获目标电压 */
     if (!g_pid_B.target_captured)
@@ -248,7 +254,7 @@ void phase_lock_driver_enable(float base_freq_a, unsigned short type_a, float ph
     g_pid_A.prev_error = 0.0f;
     g_pid_A.current_offset_hz = 0.0f;
     g_pid_A.base_freq_hz = base_freq_a;
-    g_pid_A.target_captured = 0; /* 标记目标电压待重新捕获 */
+    g_pid_A.target_captured = 0; /* 标记目标电压待重新捕获（补偿锁相放大器直流偏移） */
     g_pid_A.settle_counter = PHASE_LOCK_SETTLE_TICKS; /* 启动延迟计数 */
     g_pid_A.phase_deg = phase_a;
     g_pid_A.wave_type = type_a;
@@ -283,9 +289,8 @@ uint8_t phase_lock_driver_is_enabled(void)
 }
 
 /**
- * @brief  主循环中轮询调用 — 由 SysTick ISR 置标志位触发
- * @note   替代原来在 SysTick ISR 中直接调用 maintain_zero_output 的方式，
- *         将 SPI 阻塞操作移出中断上下文，放在主循环空闲时执行。
+ * @brief  主循环中轮询调用 — 由 TIM7 ISR 置标志位触发 (5kHz)
+ * @note   将 SPI 阻塞操作移出中断上下文，放在主循环空闲时执行。
  */
 void phase_lock_driver_poll(void)
 {

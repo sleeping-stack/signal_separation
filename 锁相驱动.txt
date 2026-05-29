@@ -1,0 +1,244 @@
+/**
+ * @brief 执行单通道的锁相更新 (Phase-Locked Loop Update)
+ * 
+ * @param ch_idx: 通道索引 (0: Channel A, 1: Channel B)
+ * @param target_freq_hz: 目标信号频率 (Hz)，由外部 FFT 频谱分析模块传入
+ * @param wave_type: 波形类型 (0: 正弦波 Sine, 1: 三角波 Triangle)
+ * 
+ * @note 本函数整合了以下两个核心硬件模块的交互：
+ *       1. [ADS8688] (ADC): 负责采集输出信号的瞬时电压，作为锁相环的反馈输入。
+ *       2. [AD9833] (DDS): 负责生成波形，通过调整频率字(Freq Word)和相位寄存器(Phase Reg)实现锁定。
+ */
+void Phase_Lock_Update(u8 ch_idx, double target_freq_hz, u16 wave_type)
+{
+    PhaseLock_State_t *p_st = &pl_state[ch_idx];
+    float vot_new = 0;    // ADS8688 采集到的最新瞬时电压
+    float d_vot = 0;      // 电压偏差 (Error Voltage)
+    float temp_v = 0;     // 转换后的电压值 (mV)
+    
+    // =========================================================================
+    // 第一部分：AD9833 初始化与频率字计算 (DDS Signal Generation Setup)
+    // =========================================================================
+    // 如果信号刚出现或频率发生显著变化，重置状态并计算初始 DDS 参数
+    if(!p_st->exist)
+    {
+        p_st->exist = 1;
+        p_st->locked = 0;             // 清除锁定标志，进入相位搜索模式
+        p_st->zero_cross_det = 0;
+        p_st->current_phase = 0;
+        p_st->last_voltage = 0;
+        p_st->cnt_up = 0;
+        p_st->cnt_down = 0;
+        
+        // --- [AD9833 Control] 计算频率控制字 (Frequency Tuning Word, FTW) ---
+        // AD9833 FCLK = 25MHz (需与 AD9833.c 中的定义一致)
+        // 公式: FTW = (Freq_Out * 2^28) / FCLK
+        double freq_word_d = (target_freq_hz * 268435456.0) / 25000000.0; 
+        
+        p_st->freq_word_base = (u32)(freq_word_d + 0.5); // 基础频率字
+        p_st->freq_word_alt = p_st->freq_word_base + 1;  // 交替频率字 (+1 LSB)，用于分数频率合成
+        
+        // 初始化占空比计数器，用于控制 base/alt 频率字的输出比例，从而实现高精度调频
+        p_st->delay_counter = 2 * STEP_BEISHU; 
+        p_st->toggle_req = 0;
+        
+        // --- [AD9833 Output] 设置初始输出频率 ---
+        force = 1; // 强制写入模式
+        adjust_channel_freq(ch_idx, p_st->freq_word_base, wave_type);
+    }
+    
+    // =========================================================================
+    // 第二部分：AD9833 频率维持与微调 (DDS Frequency Maintenance & Fine-Tuning)
+    // =========================================================================
+    // 机制：分数频率合成 (Fractional-N Synthesis)
+    // 通过快速交替输出 freq_word_base 和 freq_word_alt，使平均输出频率介于两者之间。
+    
+    // --- [AD9833 Output] 执行频率字切换 ---
+    if(p_st->toggle_req)
+    {
+        adjust_channel_freq(ch_idx, p_st->freq_word_alt, wave_type);
+        p_st->toggle_req = 0;
+    }
+    
+    // =========================================================================
+    // 第三部分：ADS8688 电压采样与反馈处理 (ADC Sampling & Feedback)
+    // =========================================================================
+    // --- [ADS8688 Sampling] 获取当前输出电压反馈 ---
+    // v_suoxiang 数组存储了 ADS8688 的最新采样原始值 (Raw Data)
+    // 注意：该数组需在主循环或其他中断中通过 Get_AUTO_RST_Mode_Data 实时更新
+    extern uint16_t v_suoxiang[2]; 
+    
+    // 将 ADS8688 的 16位原始数据转换为实际电压值 (mV)
+    // 假设参考电压范围为 +/- 2.56V (总量程 5.12V = 5120mV)，零点为 32767
+    temp_v = ((float)v_suoxiang[ch_idx] - 32767.0f) / 32767.0f * 5120.0f;
+    
+    // =========================================================================
+    // 第四部分：锁相环控制逻辑 (PLL Control Logic)
+    // =========================================================================
+    
+    // --- 状态 A: 已锁定 (Locked) -> 执行频率微调以维持相位 ---
+    if(p_st->locked)
+    {
+        // 计算电压误差：当前电压 - 锁定时的基准电压 (过零点电压)
+        d_vot = temp_v - p_st->target_voltage;
+        p_st->target_voltage = temp_v; // 缓慢更新基准，跟踪直流漂移
+        
+        // --- [Closed-Loop Control] 基于电压偏差的频率微调 ---
+        // 原理：在过零点附近，电压的变化正比于相位误差。
+        // 如果电压偏高/偏低，说明相位发生了偏移，需微调频率来补偿。
+        
+        if(d_vot > 8.0f) // 电压偏高 (相位滞后/超前，取决于具体相位关系)
+        {
+            p_st->delay_counter--; // 调整 base/alt 频率字的占比
+            if(p_st->delay_counter < 0)
+            {
+                p_st->delay_counter = 0;
+                p_st->cnt_down++; 
+                if(p_st->cnt_down >= 5) // 连续多次检测到偏差，才调整基础频率字
+                {
+                    // --- [AD9833 Control] 增加基础频率字 ---
+                    p_st->freq_word_base++;
+                    p_st->freq_word_alt++;
+                    p_st->cnt_down = 0;
+                    p_st->delay_counter = 16;
+                }
+            }
+        }
+        else
+        {
+            p_st->cnt_down = 0;
+        }
+        
+        if(d_vot < -8.0f) // 电压偏低
+        {
+            p_st->delay_counter++;
+            if(p_st->delay_counter > 16)
+            {
+                p_st->delay_counter = 16;
+                p_st->cnt_up++;
+                if(p_st->cnt_up >= 5)
+                {
+                    // --- [AD9833 Control] 减小基础频率字 ---
+                    p_st->freq_word_base--;
+                    p_st->freq_word_alt--;
+                    p_st->cnt_up = 0;
+                    p_st->delay_counter = 0;
+                }
+            }
+        }
+        else
+        {
+            p_st->cnt_up = 0;
+        }
+    }
+    
+    // --- 状态 B: 未锁定 (Unlocked) -> 执行相位搜索 (Phase Search) ---
+    else
+    {
+        // --- [ADS8688 Sampling] 获取瞬时电压用于过零检测 ---
+        // 注意：get_phaseV 内部包含延时，若实时性要求高，建议直接使用 v_suoxiang
+        float vot_arr[2];
+        get_phaseV(vot_arr, 2, 1); 
+        vot_new = vot_arr[ch_idx];
+        
+        // --- [Phase Detection] 过零点检测状态机 ---
+        if(p_st->zero_cross_det)
+        {
+            d_vot = vot_new - p_st->last_voltage; // 计算电压变化率 (斜率)
+            
+            // 检测到下降沿 (d_vot < 0) 且电压处于零点窗口 (-1.3V ~ 1.3V)
+            if((d_vot < 0) && (vot_new < 1300.0f) && (vot_new > -1300.0f))
+            {
+                p_st->target_voltage = vot_new; // 记录锁定时的基准电压
+                p_st->locked = 1;               // 标记为已锁定
+                p_st->zero_cross_det = 0;
+                p_st->delay_counter = 2 * STEP_BEISHU; // 重置微调计数器
+            }
+        }
+        else if(vot_new > 0)
+        {
+            // 电压为正，标记可能即将进入过零区 (Pre-trigger)
+            p_st->zero_cross_det = 1;
+        }
+        
+        // --- [AD9833 Control] 步进相位以寻找过零点 ---
+        if(!p_st->locked)
+        {
+            p_st->current_phase += 50.0f; // 每次步进 50 度
+            if(p_st->current_phase > 360.0f)
+            {
+                p_st->current_phase -= 360.0f;
+            }
+            // 写入 AD9833 相位寄存器
+            adjust_channel_phase(ch_idx, p_st->current_phase, wave_type);
+        }
+        
+        p_st->last_voltage = vot_new;
+    }
+    
+    // =========================================================================
+    // 第五部分：AD9833 分数频率合成的时序控制 (Timing for Fractional-N)
+    // =========================================================================
+    // 模拟原代码中的 flag_A_now_times 逻辑，控制 base/alt 频率字的切换时机
+    
+    static u8 call_cnt[2] = {0};
+    call_cnt[ch_idx]++;
+    
+    // 每调用 STEP_BEISHU*4 次，完成一个完整的微调周期
+    if(call_cnt[ch_idx] >= (STEP_BEISHU * 4))
+    {
+        call_cnt[ch_idx] = 0;
+        
+        // --- [AD9833 Control] 更新频率字切换状态 ---
+        if(p_st->delay_counter > 0)
+        {
+             p_st->delay_counter--;
+             // 保持输出 base 频率 (无需操作，因为默认就是 base)
+        }
+        else
+        {
+             // 触发一次 alt 频率输出
+             p_st->toggle_req = 1;
+             
+             // 防止死锁：如果微调逻辑未修改 delay_counter，则恢复默认值
+             if(p_st->delay_counter == 0 && !p_st->toggle_req) 
+             {
+                  if(p_st->cnt_up == 0 && p_st->cnt_down == 0)
+                      p_st->delay_counter = 2 * STEP_BEISHU; 
+             }
+        }
+    }
+}
+
+
+
+
+
+
+
+
+void get_phaseV(float * vot, uint8_t chnum, u8 times)//均值滤波
+{
+	u8 i=0;
+	u32 t[2]={0};
+	u16 v[2]={0};
+	for(i=0;i<times;i++)
+	{
+		delay_ms(1);
+		Get_AUTO_RST_Mode_Data(v, chnum);//读取扫描通道序列的AD转换数据code到变量数组中
+		t[0]+=v[0];
+		t[1]+=v[1];
+	}
+	t[0]/=times;
+	t[1]/=times;
+
+	vot[0] = (float)(((float)t[0]-32767.0f)/32767.0f*5120.0f);
+	vot[1] = (float)(((float)t[1]-32767.0f)/32767.0f*5120.0f);
+}
+
+
+
+
+
+
+

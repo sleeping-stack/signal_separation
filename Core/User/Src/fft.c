@@ -231,10 +231,6 @@ void test_signal_analysis(void)
         sig_B = sig1;
     }
 
-    // 将A、B信号频率取整到最近的5000Hz整数倍
-    sig_A.frequency = roundf(sig_A.frequency / FREQ_STEP_HZ) * FREQ_STEP_HZ;
-    sig_B.frequency = roundf(sig_B.frequency / FREQ_STEP_HZ) * FREQ_STEP_HZ;
-
     if (sig_A.type == WAVE_TRIANGLE)
     {
         sig_A.amplitude *= PI * PI / 8.0f;
