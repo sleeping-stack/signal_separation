@@ -27,7 +27,6 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-#include "phase_lock_driver.h"
 #include "ad9833.h"
 #include "adc_dma_timer.h"
 #include "fft.h"
@@ -59,6 +58,11 @@
 uint32_t time_start = 0;
 uint32_t time_end = 0;
 char tx_buffer[32] = {0}; // 用于存储发送到串口屏的数据
+
+static float g_dds_freq_a = 0.0f;
+static float g_dds_freq_b = 0.0f;
+static uint16_t g_dds_type_a = 0;
+static uint16_t g_dds_type_b = 0;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -112,13 +116,9 @@ int main(void)
     MX_ADC1_Init();
     MX_TIM6_Init();
     MX_SPI3_Init();
-    MX_TIM7_Init();
     /* USER CODE BEGIN 2 */
     AD9833_Init(hspi1); // A'
     AD9833_Init(hspi4); // B'
-
-    HAL_TIM_Base_Start_IT(&htim7);
-    phase_lock_driver_init(); // ADS8688 硬件初始化 + PID 控制器初始化
 
     memset(g_adc1_dma_data, 0, sizeof(g_adc1_dma_data));
     adc_timer_init();
@@ -131,76 +131,68 @@ int main(void)
     /* USER CODE BEGIN WHILE */
     while (1)
     {
-        // tim7 5kHz 标志位轮询 — PID 锁相
-        phase_lock_driver_poll();
 
         if (g_receive_data_flag == 1)
         {
-            phase_lock_driver_disable(); /* 新采集开始前暂停锁相 */
             time_start = time_now_ms();
             adc_start_one_time();
             g_receive_data_flag = 0;
         }
-        if (g_adc1_dma_complete_flag == 1) // 采集数据完成
+        if (g_adc1_dma_complete_flag == 1) // 采集数据完成 → FFT分析 + 更新AD9833
         {
             test_signal_analysis();
 
             if (sig_A.type == WAVE_SINE)
             {
-                AD9833_SetOutput(hspi1, sig_A.frequency, 0.0f, AD9833_OUT_SINUS);
+                g_dds_freq_a = roundf(sig_A.frequency / FREQ_STEP_HZ) * FREQ_STEP_HZ;
+                g_dds_type_a = AD9833_OUT_SINUS;
+                AD9833_SetOutput(hspi1, (uint32_t)g_dds_freq_a, 0.0f, AD9833_OUT_SINUS);
                 HAL_UART_Transmit(&huart1, (uint8_t *)tx_buffer,
-                                  sprintf(tx_buffer, "t2.txt=\"%luHz, sin_wave\"\xff\xff\xff",
-                                          (uint32_t)(roundf(sig_A.frequency / FREQ_STEP_HZ) * FREQ_STEP_HZ)),
+                                  sprintf(tx_buffer, "t2.txt=\"%luHz, sin_wave\"\xff\xff\xff", (uint32_t)g_dds_freq_a),
                                   0xFFFF);
             }
             else if (sig_A.type == WAVE_TRIANGLE)
             {
-                AD9833_SetOutput(hspi1, sig_A.frequency, 0.0f, AD9833_OUT_TRIANGLE);
-                HAL_UART_Transmit(&huart1, (uint8_t *)tx_buffer,
-                                  sprintf(tx_buffer, "t2.txt=\"%luHz, triangle_wave\"\xff\xff\xff",
-                                          (uint32_t)(roundf(sig_A.frequency / FREQ_STEP_HZ) * FREQ_STEP_HZ)),
-                                  0xFFFF);
+                g_dds_freq_a = roundf(sig_A.frequency / FREQ_STEP_HZ) * FREQ_STEP_HZ;
+                g_dds_type_a = AD9833_OUT_TRIANGLE;
+                AD9833_SetOutput(hspi1, (uint32_t)g_dds_freq_a, 0.0f, AD9833_OUT_TRIANGLE);
+                HAL_UART_Transmit(
+                    &huart1, (uint8_t *)tx_buffer,
+                    sprintf(tx_buffer, "t2.txt=\"%luHz, triangle_wave\"\xff\xff\xff", (uint32_t)g_dds_freq_a), 0xFFFF);
             }
             if (sig_B.type == WAVE_SINE)
             {
+                g_dds_freq_b = roundf(sig_B.frequency / FREQ_STEP_HZ) * FREQ_STEP_HZ;
+                g_dds_type_b = AD9833_OUT_SINUS;
                 /* 信号B'相位 = phase_diffrence 度，实现A'与B'的相位差 */
-                AD9833_SetOutput(hspi4, sig_B.frequency, (float32_t)phase_diffrence, AD9833_OUT_SINUS);
+                AD9833_SetOutput(hspi4, (uint32_t)g_dds_freq_b, (float32_t)phase_diffrence, AD9833_OUT_SINUS);
                 HAL_UART_Transmit(&huart1, (uint8_t *)tx_buffer,
-                                  sprintf(tx_buffer, "t3.txt=\"%luHz, sin_wave\"\xff\xff\xff",
-                                          (uint32_t)(roundf(sig_B.frequency / FREQ_STEP_HZ) * FREQ_STEP_HZ)),
-                                  0xFFFF); // 信号B'
+                                  sprintf(tx_buffer, "t3.txt=\"%luHz, sin_wave\"\xff\xff\xff", (uint32_t)g_dds_freq_b),
+                                  0xFFFF);
             }
             else if (sig_B.type == WAVE_TRIANGLE)
             {
+                g_dds_freq_b = roundf(sig_B.frequency / FREQ_STEP_HZ) * FREQ_STEP_HZ;
+                g_dds_type_b = AD9833_OUT_TRIANGLE;
                 /* 信号B'相位 = phase_diffrence 度，实现A'与B'的相位差 */
-                AD9833_SetOutput(hspi4, sig_B.frequency, (float32_t)phase_diffrence, AD9833_OUT_TRIANGLE);
-                HAL_UART_Transmit(&huart1, (uint8_t *)tx_buffer,
-                                  sprintf(tx_buffer, "t3.txt=\"%luHz, triangle_wave\"\xff\xff\xff",
-                                          (uint32_t)(roundf(sig_B.frequency / FREQ_STEP_HZ) * FREQ_STEP_HZ)),
-                                  0xFFFF); // 信号B'
+                AD9833_SetOutput(hspi4, (uint32_t)g_dds_freq_b, (float32_t)phase_diffrence, AD9833_OUT_TRIANGLE);
+                HAL_UART_Transmit(
+                    &huart1, (uint8_t *)tx_buffer,
+                    sprintf(tx_buffer, "t3.txt=\"%luHz, triangle_wave\"\xff\xff\xff", (uint32_t)g_dds_freq_b), 0xFFFF);
             }
 
             time_end = time_now_ms();
             HAL_UART_Transmit(
                 &huart1, (uint8_t *)tx_buffer,
                 sprintf(tx_buffer, "t6.txt=\"%.2fs\"\xff\xff\xff", (float32_t)(time_end - time_start) / 1000.0f),
-                0xFFFF); // 分析时间
-
-            /* 信号生成完毕，启动 PID 锁相闭环控制（通过调节频率保持锁相放大器输出为 0V） */
-            {
-                unsigned short type_a = (sig_A.type == WAVE_TRIANGLE) ? AD9833_OUT_TRIANGLE : AD9833_OUT_SINUS;
-                unsigned short type_b = (sig_B.type == WAVE_TRIANGLE) ? AD9833_OUT_TRIANGLE : AD9833_OUT_SINUS;
-                float freq_a = sig_A.frequency;
-                float freq_b = sig_B.frequency;
-                phase_lock_driver_enable(freq_a, type_a, 0.0f, freq_b, type_b, (float)phase_diffrence);
-            }
+                0xFFFF);
 
             g_adc1_dma_complete_flag = 0;
-            memset(g_adc1_dma_data, 0, sizeof(g_adc1_dma_data)); // 清除数据
-            // 清除sigA，sigB
+            memset(g_adc1_dma_data, 0, sizeof(g_adc1_dma_data));
             memset(&sig_A, 0, sizeof(SignalInfo_t));
             memset(&sig_B, 0, sizeof(SignalInfo_t));
         }
+
         /* USER CODE END WHILE */
 
         /* USER CODE BEGIN 3 */
